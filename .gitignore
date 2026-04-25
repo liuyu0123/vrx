@@ -5,3 +5,10 @@ syntax: glob
 *.orig
 *.*~
 *.pyc
+
+.vscode
+build
+install
+log
+*.log
+log_debug
