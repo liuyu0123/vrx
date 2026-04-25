@@ -48,4 +48,5 @@ ros2 launch vrx_tutorial nav2.launch.py
 #   5. Path： 规划路径
 #   6. PointCloud2： 点云（/wamv/sensors/lidars/lidar_wamv_sensor/points）
 # 之后在rviz2中手动点击goal point，就能看到规划结果了，USV自动航行。
+rviz2 -d rviz/tutorial.rviz
 
