@@ -50,3 +50,16 @@ ros2 launch vrx_tutorial nav2.launch.py
 # 之后在rviz2中手动点击goal point，就能看到规划结果了，USV自动航行。
 rviz2 -d rviz/tutorial.rviz
 
+# 采用launch脚本一次性启动：gazebo、nav2、rviz2
+######################################################
+# 启动顺序：先起 gazebo（含 WAM-V 与 ros_gz bridges），5 秒后起 nav2，3 秒后起 rviz2，避免 nav2 节点没等到 /clock 就 lifecycle 卡死。
+
+# 可选参数：
+
+# world:=sydney_regatta 切换世界
+# rviz_config:=/绝对/路径/xxx.rviz 换配置（默认就是 vrx_tutorial/rviz/tutorial.rviz）
+# nav2_delay:=5.0 / rviz_delay:=3.0 调延迟
+# use_sim_time:=true
+# 注意：首次使用前 WAM-V 模型仍需生成（run.sh 里那两条 generate_wamv 命令），那是一次性的预处理，没放进这个 launch。
+######################################################
+source install/setup.bash && ros2 launch vrx_tutorial bringup.launch.py
