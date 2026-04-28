@@ -4,6 +4,19 @@ from setuptools import setup
 
 package_name = 'vrx_tutorial'
 
+
+def collect_tree(top_dir):
+    """Return setuptools data_files entries for every file under ``top_dir``."""
+    entries = []
+    for dirpath, _, filenames in os.walk(top_dir):
+        if not filenames:
+            continue
+        files = [os.path.join(dirpath, f) for f in filenames]
+        install_dir = os.path.join('share', package_name, dirpath)
+        entries.append((install_dir, files))
+    return entries
+
+
 setup(
     name=package_name,
     version='0.0.1',
@@ -16,7 +29,7 @@ setup(
         (os.path.join('share', package_name, 'config'), glob(os.path.join('config', '*.yaml'))),
         (os.path.join('share', package_name, 'behavior_trees'), glob(os.path.join('behavior_trees', '*.xml'))),
         (os.path.join('share', package_name, 'rviz'), glob(os.path.join('rviz', '*.rviz'))),
-    ],
+    ] + collect_tree('models') + collect_tree('worlds'),
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='user',

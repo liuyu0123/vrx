@@ -63,3 +63,9 @@ rviz2 -d rviz/tutorial.rviz
 # 注意：首次使用前 WAM-V 模型仍需生成（run.sh 里那两条 generate_wamv 命令），那是一次性的预处理，没放进这个 launch。
 ######################################################
 source install/setup.bash && ros2 launch vrx_tutorial bringup.launch.py
+
+
+# 地图升级，增加避障航道
+source install/setup.bash
+ros2 launch vrx_tutorial bringup.launch.py                              # 默认：原 sydney_regatta
+ros2 launch vrx_tutorial bringup.launch.py world:=tutorial_navigation   # 带 S 型水道

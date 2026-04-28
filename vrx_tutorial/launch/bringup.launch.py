@@ -5,10 +5,11 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
+    SetEnvironmentVariable,
     TimerAction,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
 
 
@@ -17,12 +18,24 @@ def generate_launch_description():
     vrx_tutorial_dir = get_package_share_directory('vrx_tutorial')
 
     default_rviz_config = os.path.join(vrx_tutorial_dir, 'rviz', 'tutorial.rviz')
+    tutorial_models_dir = os.path.join(vrx_tutorial_dir, 'models')
+    tutorial_worlds_dir = os.path.join(vrx_tutorial_dir, 'worlds')
 
     world = LaunchConfiguration('world')
     rviz_config = LaunchConfiguration('rviz_config')
     use_sim_time = LaunchConfiguration('use_sim_time')
     nav2_delay = LaunchConfiguration('nav2_delay')
     rviz_delay = LaunchConfiguration('rviz_delay')
+
+    # Make Gazebo find vrx_tutorial's custom models / worlds without touching vrx_gz
+    set_gz_resource_path = SetEnvironmentVariable(
+        name='GZ_SIM_RESOURCE_PATH',
+        value=[
+            tutorial_models_dir, ':',
+            tutorial_worlds_dir, ':',
+            EnvironmentVariable('GZ_SIM_RESOURCE_PATH', default_value=''),
+        ],
+    )
 
     # 1. Gazebo + WAM-V + ros_gz bridges
     gazebo_launch = IncludeLaunchDescription(
@@ -56,7 +69,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'world',
             default_value='sydney_regatta',
-            description='Gazebo world to load'),
+            description='Gazebo world to load. Use "tutorial_navigation" for the S-shaped wall channel.'),
         DeclareLaunchArgument(
             'rviz_config',
             default_value=default_rviz_config,
@@ -73,6 +86,7 @@ def generate_launch_description():
             'rviz_delay',
             default_value='3.0',
             description='Seconds to wait before launching RViz2'),
+        set_gz_resource_path,
         gazebo_launch,
         nav2_delayed,
         rviz_delayed,
