@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-"""Convert geometry_msgs/Twist (cmd_vel) to WAM-V thruster commands."""
+"""Convert geometry_msgs/Twist (cmd_vel) to WAM-V thruster commands.
+
+Mixed differential-thrust + vectored-thrust control for the H-config
+WAM-V (two aft thrusters, each independently steerable):
+
+  left_thrust  = linear * thrust_scale + angular * diff_thrust_scale
+  right_thrust = linear * thrust_scale - angular * diff_thrust_scale
+  left_pos     = right_pos = -angular * pos_scale
+
+Differential thrust gives in-place yaw authority (Ackermann-only steering
+needs forward velocity, which Nav2's DWB does not always command). The
+vectoring term contributes extra side force when the boat is moving.
+"""
 
 import rclpy
 from rclpy.node import Node
@@ -20,11 +32,13 @@ class CmdVelToWamv(Node):
         self.declare_parameter('max_thrust', 1000.0)
         self.declare_parameter('max_pos', 1.0)
         self.declare_parameter('thrust_scale', 500.0)
+        self.declare_parameter('diff_thrust_scale', 400.0)
         self.declare_parameter('pos_scale', 0.5)
 
         self.max_thrust = self.get_parameter('max_thrust').value
         self.max_pos = self.get_parameter('max_pos').value
         self.thrust_scale = self.get_parameter('thrust_scale').value
+        self.diff_thrust_scale = self.get_parameter('diff_thrust_scale').value
         self.pos_scale = self.get_parameter('pos_scale').value
 
         cmd_topic = self.get_parameter('cmd_vel_topic').value
@@ -49,7 +63,9 @@ class CmdVelToWamv(Node):
         self.get_logger().info('CmdVelToWamv node started.')
         self.get_logger().info(
             f'Params: max_thrust={self.max_thrust}, max_pos={self.max_pos}, '
-            f'thrust_scale={self.thrust_scale}, pos_scale={self.pos_scale}'
+            f'thrust_scale={self.thrust_scale}, '
+            f'diff_thrust_scale={self.diff_thrust_scale}, '
+            f'pos_scale={self.pos_scale}'
         )
 
     def cmd_callback(self, msg: Twist):
@@ -58,17 +74,23 @@ class CmdVelToWamv(Node):
         linear = msg.linear.x
         angular = msg.angular.z
 
-        # Compute thrust from linear velocity
-        thrust = linear * self.thrust_scale
-        thrust = max(-self.max_thrust, min(self.max_thrust, thrust))
+        # Base forward thrust
+        base = linear * self.thrust_scale
 
-        # Compute rudder angle from angular velocity
-        # Negative angular.z -> turn left -> positive rudder angle (point right)
+        # Differential thrust generates yaw torque without needing forward speed.
+        # Positive angular.z (turn left, CCW) -> left thrust down, right thrust up.
+        diff = angular * self.diff_thrust_scale
+
+        left_thrust = max(-self.max_thrust, min(self.max_thrust, base - diff))
+        right_thrust = max(-self.max_thrust, min(self.max_thrust, base + diff))
+
+        # Vectoring (thruster steering) adds side force when underway.
+        # Negative angular.z (turn right) -> positive thruster angle (point right).
         pos = -angular * self.pos_scale
         pos = max(-self.max_pos, min(self.max_pos, pos))
 
-        self.left_pub.publish(Float64(data=float(thrust)))
-        self.right_pub.publish(Float64(data=float(thrust)))
+        self.left_pub.publish(Float64(data=float(left_thrust)))
+        self.right_pub.publish(Float64(data=float(right_thrust)))
         self.left_pos_pub.publish(Float64(data=float(pos)))
         self.right_pos_pub.publish(Float64(data=float(pos)))
 
