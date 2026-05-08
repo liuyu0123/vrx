@@ -40,6 +40,17 @@ if [ ! -f /opt/ros/humble/setup.bash ]; then
     exit 1
 fi
 
+PYTHON3_PATH=$(command -v python3)
+if [[ "$PYTHON3_PATH" == *"miniconda"* ]] || [[ "$PYTHON3_PATH" == *"anaconda"* ]] || [[ "$PYTHON3_PATH" == *"conda"* ]]; then
+    log_warn "检测到当前默认 python3 来自 conda/miniconda: $PYTHON3_PATH"
+    log_warn "这会导致 colcon 编译时缓存 conda 的 Python 路径，后续出现 'No module named catkin_pkg' 等错误。"
+    log_warn "建议在运行本脚本和 colcon build 之前，先执行 'conda deactivate' 彻底退出 conda 环境。"
+    read -rp "是否仍要继续? [y/N] " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        exit 0
+    fi
+fi
+
 # ------------------- 安装系统依赖 -------------------
 
 log_info "更新 apt 索引..."
@@ -56,6 +67,7 @@ sudo apt-get install -y \
     python3-vcstool \
     python3-colcon-common-extensions \
     python3-rosdep \
+    python3-catkin-pkg \
     build-essential \
     cmake \
     git
@@ -100,7 +112,9 @@ sudo apt-get install -y \
 log_info "安装 VRX 构建与运行依赖..."
 sudo apt-get install -y \
     python3-sdformat13 \
-    ros-humble-xacro
+    ros-humble-xacro \
+    ros-humble-navigation2 \
+    ros-humble-nav2-bringup
 
 # ------------------- 初始化 rosdep -------------------
 
