@@ -11,14 +11,15 @@ from nav2_common.launch import RewrittenYaml
 
 def generate_launch_description():
     vrx_tutorial_dir = get_package_share_directory('vrx_tutorial')
-    nav2_bringup_dir = get_package_share_directory('nav2_bringup')
-
     params_file = os.path.join(vrx_tutorial_dir, 'config', 'nav2_params.yaml')
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     autostart = LaunchConfiguration('autostart', default='true')
 
     # Rewrite use_sim_time into params file
-    param_substitutions = {'use_sim_time': use_sim_time, 'autostart': autostart}
+    param_substitutions = {
+        'use_sim_time': use_sim_time,
+        'autostart': autostart,
+    }
     configured_params = RewrittenYaml(
         source_file=params_file,
         root_key='',
@@ -43,8 +44,6 @@ def generate_launch_description():
     )
 
     # 2. Bridge Gazebo world pose to ROS TF and /odom.
-    # VRX does not publish the model's world pose to /tf; we read it directly
-    # from Gazebo's /world/*/pose/info topic.
     gz_model_pose_bridge = Node(
         package='vrx_tutorial',
         executable='gz_model_pose_bridge',
@@ -60,10 +59,22 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    # 4. Nav2 navigation stack (no map_server / amcl)
+    # 4. RKP global planner (replaces Nav2 planner_server action)
+    rkp_planner = Node(
+        package='vrx_tutorial',
+        executable='rkp_planner',
+        name='rkp_planner',
+        namespace='rkp',
+        parameters=[configured_params, {'use_sim_time': use_sim_time}],
+        output='screen',
+    )
+
+    # 5. Nav2 navigation stack (custom launch that remaps bt_navigator's
+    # ComputePathToPose action client to /rkp/ComputePathToPose so it talks
+    # to rkp_planner instead of the default planner_server.)
     navigation_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(nav2_bringup_dir, 'launch', 'navigation_launch.py')
+            os.path.join(vrx_tutorial_dir, 'launch', 'navigation_launch_rkp.py')
         ),
         launch_arguments={
             'use_sim_time': use_sim_time,
@@ -85,5 +96,6 @@ def generate_launch_description():
         static_base_link_fix,
         gz_model_pose_bridge,
         cmd_vel_to_wamv,
+        rkp_planner,
         navigation_launch,
     ])

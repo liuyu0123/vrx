@@ -44,6 +44,7 @@ setup(
             'cmd_vel_to_wamv = vrx_tutorial.cmd_vel_to_wamv:main',
             'pose_to_odom = vrx_tutorial.pose_to_odom:main',
             'gz_model_pose_bridge = vrx_tutorial.gz_model_pose_bridge:main',
+            'rkp_planner = vrx_tutorial.rkp_planner:main',
         ],
     },
 )
