@@ -6,15 +6,19 @@ import math
 import numpy as np
 
 
-def a_star_path_planning(grid_map, start_rc, goal_rc, search_directions=8):
+def a_star_path_planning(grid_map, cost_map, start_rc, goal_rc, search_directions=8, cost_weight=3.0):
     """
     A* path planning on a binary grid (optimized with heapq).
 
     Args:
         grid_map: 2D numpy array, 0=free, 1=occupied
+        cost_map: 2D numpy array, values in [0.0, 1.0] representing inflation
+            layer cost. A* adds cost_map[nr,nc] * cost_weight to the step cost
+            so the path prefers the middle of channels.
         start_rc: (row, col) tuple, grid index
         goal_rc: (row, col) tuple, grid index
         search_directions: 4 or 8
+        cost_weight: multiplier for inflation cost penalty.
 
     Returns:
         path: Nx2 numpy array of [row, col], or empty array if no path
@@ -57,6 +61,8 @@ def a_star_path_planning(grid_map, start_rc, goal_rc, search_directions=8):
                 continue
             neighbor = (nr, nc)
             tentative_g = g_score[current] + step_cost
+            if cost_map is not None:
+                tentative_g += float(cost_map[nr, nc]) * cost_weight
             if tentative_g < g_score.get(neighbor, float('inf')):
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g
@@ -110,18 +116,24 @@ def bresenham_line(r0, c0, r1, c1):
     return np.array(points, dtype=int)
 
 
-def bresenham_free(p0, p1, grid_map):
-    """Check if Bresenham line between p0 and p1 is free of obstacles."""
+def bresenham_free(p0, p1, grid_map, cost_map=None, max_cost=0.3):
+    """Check if Bresenham line between p0 and p1 is free of obstacles.
+
+    If cost_map is provided, any cell with cost > max_cost is treated as
+    blocked so the line stays away from inflated obstacle edges.
+    """
     line = bresenham_line(int(round(p0[0])), int(round(p0[1])),
                           int(round(p1[0])), int(round(p1[1])))
     rows, cols = grid_map.shape
     for r, c in line:
         if r < 0 or r >= rows or c < 0 or c >= cols or grid_map[r, c] == 1:
             return False
+        if cost_map is not None and cost_map[r, c] > max_cost:
+            return False
     return True
 
 
-def cut_useless_nodes(path, grid_map, max_look=150):
+def cut_useless_nodes(path, grid_map, cost_map=None, max_look=150, max_cost=0.3):
     """
     Bidirectional node reduction using Bresenham visibility check.
     Mimics Mission.cut_useless_node() behavior.
@@ -129,7 +141,11 @@ def cut_useless_nodes(path, grid_map, max_look=150):
     Args:
         path: Nx2 array of [row, col]
         grid_map: binary grid
+        cost_map: optional normalized cost map for inflation-layer check.
         max_look: max jump distance in nodes
+        max_cost: if cost_map is given, any Bresenham cell with cost > max_cost
+            blocks the jump, preserving waypoints that keep the path in the
+            middle of channels.
 
     Returns:
         sparse_path: Mx2 array
@@ -145,7 +161,7 @@ def cut_useless_nodes(path, grid_map, max_look=150):
         find_length = min(max_look, n - 1 - i)
         best_j = i + 1
         for j in range(i + find_length, i, -1):
-            if bresenham_free(path[i], path[j], grid_map):
+            if bresenham_free(path[i], path[j], grid_map, cost_map, max_cost):
                 best_j = j
                 break
         cut.append(path[best_j])
@@ -160,7 +176,7 @@ def cut_useless_nodes(path, grid_map, max_look=150):
         find_length = min(max_look, i)
         best_j = i - 1
         for j in range(i - find_length, i):
-            if bresenham_free(cut[i], cut[j], grid_map):
+            if bresenham_free(cut[i], cut[j], grid_map, cost_map, max_cost):
                 best_j = j
                 break
         final.append(cut[best_j])

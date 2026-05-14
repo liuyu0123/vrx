@@ -86,15 +86,30 @@ class RKPPlanner(Node):
     # ------------------------------------------------------------------
     def _costmap_callback(self, msg: OccupancyGrid):
         # Convert OccupancyGrid to binary numpy grid
-        # Values: 0-100 = probability, -1 = unknown
+        # Values: 0-100 = probability/cost, -1 = unknown
         # In vrx nav2_params, track_unknown_space=false, so unknown is treated as free.
         width = msg.info.width
         height = msg.info.height
         data = np.array(msg.data, dtype=np.int8).reshape((height, width))
-        grid = np.where(data > 50, 1, 0).astype(np.uint8)
+
+        # Binary grid for collision checks.
+        # Threshold lowered from 50 -> 25 so the inflation-layer buffer is
+        # treated as hard obstacles.  With inflation_radius=8.0 and
+        # cost_scaling_factor=0.8, cost=25 corresponds to ~2.8 m past the
+        # inscribed radius (robot_radius=2.5 m), i.e. the hull stays ~3 m
+        # away from the wall.  A* and RKP both use this binary grid.
+        grid = np.where(data > 25, 1, 0).astype(np.uint8)
+
+        # Normalized cost [0.0, 1.0] for A* path planning.
+        # Inflation layer produces costs > 0 near obstacles; A* will add a
+        # penalty so the initial path prefers the middle of channels instead
+        # of hugging obstacle edges.
+        cost = np.where(data < 0, 0, data).astype(np.float32)
+        cost = cost / 100.0
 
         self._latest_costmap = {
             'grid': grid,
+            'cost': cost,
             'info': msg.info,
             'stamp': msg.header.stamp,
         }
@@ -152,6 +167,7 @@ class RKPPlanner(Node):
                 return result
 
             grid = costmap['grid']
+            cost = costmap['cost']
             info = costmap['info']
 
             # Convert poses to grid coordinates
@@ -173,9 +189,10 @@ class RKPPlanner(Node):
                 f'world ({sx:.1f},{sy:.1f}) -> ({gx:.1f},{gy:.1f})'
             )
 
-            # 1. A* search
+            # 1. A* search (with inflation-cost penalty so the path stays in
+            # the middle of channels instead of hugging obstacle edges)
             search_dirs = self.get_parameter('astar.search_directions').value
-            path_grid = a_star_path_planning(grid, (s_r, s_c), (g_r, g_c), search_dirs)
+            path_grid = a_star_path_planning(grid, cost, (s_r, s_c), (g_r, g_c), search_dirs, cost_weight=8.0)
             if path_grid.size == 0:
                 self.get_logger().error('A* failed to find a path')
                 goal_handle.abort()
@@ -184,12 +201,13 @@ class RKPPlanner(Node):
 
             self.get_logger().info(f'A* found {len(path_grid)} waypoints')
 
-            # 2. Node reduction (Bresenham) or fixed subsampling
+            # 2. Node reduction (Bresenham) or fixed subsampling.
+            # Pass cost_map so cuts are blocked by inflated obstacle edges.
             use_reduction = self.get_parameter('node_reduction.enabled').value
             min_waypoints = self.get_parameter('node_reduction.min_waypoints').value
             if use_reduction:
                 max_look = self.get_parameter('node_reduction.max_look').value
-                sparse_grid = cut_useless_nodes(path_grid, grid, max_look)
+                sparse_grid = cut_useless_nodes(path_grid, grid, cost, max_look=max_look, max_cost=0.15)
                 self.get_logger().info(f'Node reduction: {len(path_grid)} -> {len(sparse_grid)}')
                 # Fallback if too aggressively reduced (likely costmap missing obstacles)
                 if len(sparse_grid) < min_waypoints:

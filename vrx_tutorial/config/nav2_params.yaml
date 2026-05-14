@@ -129,13 +129,15 @@ controller_server:
       # Pure pursuit's heading control is effectively P-only with
       # gain ~ 1/lookahead. To damp the WAM-V's heading wobble, look
       # FURTHER ahead: larger lookahead = lower gain = smoother yaw.
-      # If the boat is too sluggish to follow tight curves after this,
-      # cut lookahead_time first.
+      # NOTE: lookahead was reduced slightly (8 -> 6 m) to reduce
+      # "cutting corners" toward obstacles without introducing yaw
+      # oscillation.  min_lookahead also lowered so the boat doesn't
+      # overshoot when moving slowly near obstacles.
       use_velocity_scaled_lookahead_dist: true
-      lookahead_time: 3.0
-      lookahead_dist: 8.0
-      min_lookahead_dist: 6.0
-      max_lookahead_dist: 15.0
+      lookahead_time: 2.5
+      lookahead_dist: 6.0
+      min_lookahead_dist: 4.0
+      max_lookahead_dist: 12.0
 
       # --- regulation: slow down in tight turns and near obstacles ---
       use_regulated_linear_velocity_scaling: true
